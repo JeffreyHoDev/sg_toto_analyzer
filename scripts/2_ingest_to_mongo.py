@@ -10,8 +10,8 @@ load_dotenv()
 
 connection_string = os.getenv("MONGODB_CONNECTION_STRING")
 client = MongoClient(connection_string)
-db = client['lottery_db']
-collection = db['toto_results']
+db = os.getenv("MONGODB_DBNAME")
+collection = os.getenv("MONGODB_COLLECTION")
 
 def ingest_data(file_path):
     draws = []

@@ -58,7 +58,7 @@ def latest(num):
 @click.option('--num', type=int, default=6, help="Number of results to show")
 @click.option('--csv', is_flag=True, help="Save results to CSV")
 @click.option('--range', 'date_range', callback=parse_date_range, 
-              help="Format YYYY-MM-DD:YYYY-MM-DD")
+              help="Format YYYY-MM-DD:YYYY-MM-DD Show the result within the date range")
 def topnum(num, csv, date_range):
     """Analyze TOTO frequencies using local Pandas filtering."""
     try:
@@ -115,8 +115,43 @@ def topnum(num, csv, date_range):
     finally:
         client.close()
 
+@click.command()
+def combination():
+    """Analyze TOTO combination frequency."""
+    try:
+        client = MongoClient(os.getenv("MONGODB_CONNECTION_STRING"))
+        db = client[os.getenv("MONGODB_DBNAME")]
+        collection = db[os.getenv("MONGODB_COLLECTION")]
+
+        data = list(collection.find({}, {"winning_numbers": 1, "date": 1, "_id": 0}))
+        df = pd.DataFrame(data)
+        df["Combination"] = df["winning_numbers"].apply(lambda nums: tuple(sorted(nums)))
+        combo_counts = (
+            df["Combination"]
+            .value_counts()
+            .reset_index()
+            .rename(columns={"Combination": "winning_numbers", "count": "Occurrences"})
+        )
+
+        combo_counts["winning_numbers"] = combo_counts["winning_numbers"].apply(
+            lambda c: ", ".join(str(n) for n in c)
+        )
+
+        # Pretty print the output
+        headers = ["Combination", "Occurrences"]
+        click.echo(tabulate(combo_counts.head(3), headers=headers, tablefmt="grid", showindex=False))
+
+    except Exception as e:
+        click.secho(f"❌ Error: {e}", fg="red")
+    finally:
+        client.close()    
+
+
+
 cli.add_command(latest)
 cli.add_command(topnum)
+cli.add_command(combination)
+
 
 if __name__ == "__main__":
     cli()

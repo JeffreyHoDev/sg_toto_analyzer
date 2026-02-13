@@ -87,8 +87,15 @@ def read_root():
         data = get_latest_draw_from_web()
         if data:
             sync_to_mongodb(data)
-            return {"status": "success", "draw_no": data["draw_no"], "date": data["date"].strftime('%Y-%m-%d')}
-        return {"status": "failed", "message": "No data found on web"}
+            return "Success"
+        return "Failed"
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return f"Error-{str(e)}"
+
+@app.get("/health")
+def health():
+    try:
+        return "OK"
+    except Exception as e:
+        return f"Error-{str(e)}"
     

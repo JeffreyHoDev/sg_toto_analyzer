@@ -1,5 +1,6 @@
 import click
 from pymongo import MongoClient, DESCENDING
+from itertools import combinations
 from tabulate import tabulate
 import pandas as pd
 import os
@@ -66,7 +67,7 @@ def topnum(num, csv, date_range):
         db = client[os.getenv("MONGODB_DBNAME")]
         collection = db[os.getenv("MONGODB_COLLECTION")]
         
-        # 1. Fetch EVERYTHING (since strings can't be filtered efficiently in DB)
+        # 1. Fetch all data
         click.echo("📥 Fetching data from MongoDB...")
         data = list(collection.find({}, {"winning_numbers": 1, "date": 1, "_id": 0}))
         
@@ -77,7 +78,6 @@ def topnum(num, csv, date_range):
         # 2. Convert to DataFrame
         df = pd.DataFrame(data)
         # 3. Fix the Date Type locally (DOES NOT update MongoDB)
-        # errors='coerce' turns bad dates into NaT (Not a Time)
         df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
         # 4. Filter the DataFrame if range is provided
@@ -94,7 +94,7 @@ def topnum(num, csv, date_range):
             click.echo("No records match that date range.")
             return
 
-        # 5. Explode and Count (Your existing logic)
+        # 5. Explode and Count
         exploded_df = df.explode('winning_numbers')
         counts = exploded_df['winning_numbers'].value_counts().reset_index()
         counts.columns = ['Number', 'Occurrence']
@@ -146,11 +146,73 @@ def combination():
     finally:
         client.close()    
 
+@click.command()
+@click.option('--group-size', '-g', default=2, type=click.IntRange(2, 6), 
+              help='Size of number groups to analyze (2-6, default: 2)')
+@click.option('--top', '-t', default=10, type=int,
+              help='Number of top results to display (default: 10)')
+def groupfreq(group_size, top):
+    """
+    Analyze frequency of number groups in lottery history.
+    
+    Examples:
+        lottery frequency --group-size 2    # Find most common pairs
+        lottery frequency -g 3 -t 15        # Find top 15 triplets
+        lottery frequency -g 6              # Find exact 6-number combinations
+    """
+    try:
+        client = MongoClient(os.getenv("MONGODB_CONNECTION_STRING"))
+        db = client[os.getenv("MONGODB_DBNAME")]
+        collection = db[os.getenv("MONGODB_COLLECTION")]
+
+        # Load data from MongoDB
+        data = list(collection.find({}, {"winning_numbers": 1, "_id": 0}))
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            click.secho("❌ No data found in database", fg="red")
+            return
+
+        # Generate all combinations of the specified size from each draw
+        all_combos = []
+        for numbers in df["winning_numbers"]:
+            for combo in combinations(sorted(numbers), group_size):
+                all_combos.append(combo)
+        
+        # Count occurrences using pandas
+        combo_series = pd.Series(all_combos)
+        combo_counts = (
+            combo_series
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "Numbers", "count": "Occurrences"})
+        )
+        
+        # Format the numbers as readable strings
+        combo_counts["Numbers"] = combo_counts["Numbers"].apply(
+            lambda c: ", ".join(str(n) for n in c)
+        )
+        
+        # Display results
+        group_labels = {2: "Pairs", 3: "Triplets", 4: "Quads", 5: "Quintets", 6: "Six-Number Sets"}
+        click.secho(f"\n🎲 Top {top} Most Frequent {group_labels.get(group_size, f'{group_size}-Number Groups')}", 
+                    fg="cyan", bold=True)
+        
+        headers = ["Numbers", "Occurrences"]
+        click.echo(tabulate(combo_counts.head(top), headers=headers, tablefmt="grid", showindex=False))
+        click.echo()
+
+    except Exception as e:
+        click.secho(f"❌ Error: {e}", fg="red")
+    finally:
+        client.close()
+
 
 
 cli.add_command(latest)
 cli.add_command(topnum)
 cli.add_command(combination)
+cli.add_command(groupfreq)
 
 
 if __name__ == "__main__":

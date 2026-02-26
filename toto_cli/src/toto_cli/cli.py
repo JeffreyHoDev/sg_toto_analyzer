@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 
 from .util import parse_date_range
+from .decorators.decorators import process_time
 
 # Load variables from .env file
 load_dotenv()
@@ -22,6 +23,7 @@ def cli():
 
 @click.command()
 @click.option('--num', type=int, default=3, help="Number of draws to fetch")
+@process_time
 def latest(num):
     """Fetch the latest NUM results from MongoDB."""
     try:
@@ -55,11 +57,13 @@ def latest(num):
     finally:
         client.close()
 
+# @process_time
 @click.command()
 @click.option('--num', type=int, default=6, help="Number of results to show")
 @click.option('--csv', is_flag=True, help="Save results to CSV")
 @click.option('--range', 'date_range', callback=parse_date_range, 
               help="Format YYYY-MM-DD:YYYY-MM-DD Show the result within the date range")
+@process_time
 def topnum(num, csv, date_range):
     """Analyze TOTO frequencies using local Pandas filtering."""
     try:
@@ -116,6 +120,7 @@ def topnum(num, csv, date_range):
         client.close()
 
 @click.command()
+@process_time
 def combination():
     """Analyze TOTO combination frequency."""
     try:
@@ -147,6 +152,7 @@ def combination():
         client.close()    
 
 @click.command()
+@process_time
 @click.option('--group-size', '-g', default=2, type=click.IntRange(2, 6), 
               help='Size of number groups to analyze (2-6, default: 2)')
 @click.option('--top', '-t', default=10, type=int,
